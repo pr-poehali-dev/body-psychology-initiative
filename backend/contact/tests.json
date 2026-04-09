@@ -1,0 +1,26 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Успешная заявка",
+      "method": "POST",
+      "path": "/",
+      "body": { "name": "Тест", "contact": "@test_tg", "message": "Тестовое сообщение" },
+      "expectedStatus": 200,
+      "expectedBody": { "ok": true },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Ошибка — нет имени",
+      "method": "POST",
+      "path": "/",
+      "body": { "contact": "@test_tg" },
+      "expectedStatus": 422
+    }
+  ]
+}

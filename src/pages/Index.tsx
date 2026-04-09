@@ -340,25 +340,123 @@ function FAQ() {
 }
 
 /* ── CTA ── */
+type FormState = "idle" | "loading" | "done" | "error";
+
 function CTA() {
+  const [name, setName]       = useState("");
+  const [contact, setContact] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus]   = useState<FormState>("idle");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !contact.trim()) return;
+    setStatus("loading");
+    try {
+      const func2url = (window as Record<string, unknown>).__FUNC2URL__ as Record<string, string> | undefined;
+      const contactUrl = func2url?.["contact"];
+      if (!contactUrl) {
+        const text = encodeURIComponent(`Имя: ${name}\nКонтакт: ${contact}${message ? `\nЗапрос: ${message}` : ""}`);
+        window.open(`https://t.me/ElenaOrehovaa?text=${text}`, "_blank");
+        setStatus("done");
+        return;
+      }
+      const res = await fetch(contactUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, contact, message }),
+      });
+      setStatus(res.ok ? "done" : "error");
+    } catch {
+      setStatus("error");
+    }
+  };
+
   return (
     <section className="cta-section" id="cta" aria-labelledby="cta-title">
-      <div className="container--narrow" style={{ textAlign: "center", position: "relative" }}>
-        <span className="section-label fade-in">Начать</span>
-        <h2 className="cta__title fade-in" id="cta-title">
-          Иногда достаточно<br />одного разговора,<br />чтобы что-то <em>стало ясно</em>
-        </h2>
-        <p className="cta__text fade-in">Запишись на бесплатную встречу — 20 минут. Я расскажу, как устроена работа. Ты расскажешь, что происходит. И мы поймём, есть ли смысл идти дальше вместе.</p>
-        <div className="cta__actions fade-in">
-          <a href="https://t.me/ElenaOrehovaa" className="btn-inverse" target="_blank" rel="noopener noreferrer">
-            <IconTg />
-            Написать в Telegram
-          </a>
-          <a href="https://t.me/ElenaOrehovaa" className="btn-outline-inv" target="_blank" rel="noopener noreferrer">
-            Бесплатный звонок 20&nbsp;мин
-          </a>
+      <div className="container--narrow" style={{ position: "relative" }}>
+        <div style={{ textAlign: "center", marginBottom: "var(--space-10)" }}>
+          <span className="section-label fade-in">Начать</span>
+          <h2 className="cta__title fade-in" id="cta-title">
+            Иногда достаточно<br />одного разговора,<br />чтобы что-то <em>стало ясно</em>
+          </h2>
+          <p className="cta__text fade-in">Запишись на бесплатную встречу — 20 минут. Оставь контакт, и я напишу тебе сама.</p>
         </div>
-        <p className="cta__micro fade-in">@ElenaOrehovaa · Без обязательств · Только ясность</p>
+
+        {status === "done" ? (
+          <div className="cta-form__success fade-in">
+            <div className="cta-form__success-icon">✓</div>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", fontWeight: 300, color: "var(--color-text-inverse)", marginBottom: "var(--space-3)" }}>
+              Заявка отправлена
+            </h3>
+            <p style={{ fontSize: "var(--text-sm)", color: "color-mix(in srgb, var(--color-text-inverse) 65%, transparent)" }}>
+              Я напишу тебе в ближайшее время. Обычно — в течение нескольких часов.
+            </p>
+          </div>
+        ) : (
+          <form className="cta-form fade-in" onSubmit={handleSubmit} noValidate>
+            <div className="cta-form__row">
+              <div className="cta-form__field">
+                <label className="cta-form__label" htmlFor="cf-name">Твоё имя</label>
+                <input
+                  id="cf-name"
+                  className="cta-form__input"
+                  type="text"
+                  placeholder="Как к тебе обращаться?"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  disabled={status === "loading"}
+                />
+              </div>
+              <div className="cta-form__field">
+                <label className="cta-form__label" htmlFor="cf-contact">Telegram или email</label>
+                <input
+                  id="cf-contact"
+                  className="cta-form__input"
+                  type="text"
+                  placeholder="@username или почта"
+                  value={contact}
+                  onChange={e => setContact(e.target.value)}
+                  required
+                  disabled={status === "loading"}
+                />
+              </div>
+            </div>
+            <div className="cta-form__field">
+              <label className="cta-form__label" htmlFor="cf-message">С чем хочешь разобраться? <span style={{ opacity: .5 }}>(необязательно)</span></label>
+              <textarea
+                id="cf-message"
+                className="cta-form__input cta-form__textarea"
+                placeholder="Расскажи в паре слов — это поможет мне подготовиться к нашей встрече"
+                rows={3}
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                disabled={status === "loading"}
+              />
+            </div>
+            {status === "error" && (
+              <p className="cta-form__error">Что-то пошло не так. Напиши мне напрямую: <a href="https://t.me/ElenaOrehovaa" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>@ElenaOrehovaa</a></p>
+            )}
+            <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="submit"
+                className="btn-inverse"
+                disabled={status === "loading" || !name.trim() || !contact.trim()}
+                style={{ opacity: (status === "loading" || !name.trim() || !contact.trim()) ? 0.6 : 1 }}
+              >
+                {status === "loading" ? "Отправляю…" : "Записаться на бесплатную встречу"}
+              </button>
+              <a href="https://t.me/ElenaOrehovaa" className="btn-outline-inv" target="_blank" rel="noopener noreferrer">
+                <IconTg />
+                Telegram
+              </a>
+            </div>
+            <p className="cta__micro" style={{ marginTop: "var(--space-5)", textAlign: "left" }}>
+              @ElenaOrehovaa · Без обязательств · Только ясность
+            </p>
+          </form>
+        )}
       </div>
     </section>
   );
