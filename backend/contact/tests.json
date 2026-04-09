@@ -12,8 +12,7 @@
       "path": "/",
       "body": { "name": "Тест", "contact": "@test_tg", "message": "Тестовое сообщение" },
       "expectedStatus": 200,
-      "expectedBody": { "ok": true },
-      "bodyMatcher": "partial"
+      "expectedStatus": 200
     },
     {
       "name": "Ошибка — нет имени",

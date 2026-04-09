@@ -1,10 +1,9 @@
-"""Принимает заявку с сайта и отправляет уведомление на почту."""
+"""Принимает заявку с сайта и отправляет письмо через Mailgun."""
 
 import json
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import urllib.request
+import urllib.parse
 
 
 CORS_HEADERS = {
@@ -28,12 +27,18 @@ def handler(event: dict, context) -> dict:
     message = (body.get("message") or "").strip()
 
     if not name or not contact:
-        return {"statusCode": 422, "headers": CORS_HEADERS, "body": json.dumps({"error": "name and contact are required"})}
+        return {
+            "statusCode": 422,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": "name and contact are required"}),
+        }
 
-    to_email = os.environ.get("SMTP_TO_EMAIL", "")
+    api_key    = os.environ.get("MAILGUN_API_KEY", "")
+    domain     = os.environ.get("MAILGUN_DOMAIN", "")
+    to_email   = os.environ.get("NOTIFY_EMAIL", "")
 
-    if to_email:
-        _send_email(to_email, name, contact, message)
+    if api_key and domain and to_email:
+        _send_via_mailgun(api_key, domain, to_email, name, contact, message)
 
     return {
         "statusCode": 200,
@@ -42,33 +47,49 @@ def handler(event: dict, context) -> dict:
     }
 
 
-def _send_email(to_email: str, name: str, contact: str, message: str):
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.yandex.ru")
-    smtp_port = int(os.environ.get("SMTP_PORT", "465"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
+def _send_via_mailgun(api_key: str, domain: str, to_email: str,
+                      name: str, contact: str, message: str):
+    message_block = f"""
+      <tr>
+        <td style="padding:8px 0;color:#6b6254;font-size:13px;vertical-align:top;width:110px;">Запрос</td>
+        <td style="padding:8px 0;">{message.replace(chr(10), '<br>')}</td>
+      </tr>
+    """ if message else ""
 
-    subject = f"Новая заявка с сайта — {name}"
     html = f"""
-    <div style="font-family: sans-serif; max-width: 520px; color: #2a2319;">
-      <h2 style="color: #9c4a2a; margin-bottom: 16px;">Новая заявка с сайта</h2>
-      <table style="width:100%; border-collapse: collapse;">
-        <tr><td style="padding: 8px 0; color:#6b6254; font-size:13px; width:120px;">Имя</td>
-            <td style="padding: 8px 0; font-weight:500;">{name}</td></tr>
-        <tr><td style="padding: 8px 0; color:#6b6254; font-size:13px;">Контакт</td>
-            <td style="padding: 8px 0;">{contact}</td></tr>
-        {"<tr><td style='padding: 8px 0; color:#6b6254; font-size:13px; vertical-align:top;'>Запрос</td><td style='padding: 8px 0;'>" + message.replace('\n', '<br>') + "</td></tr>" if message else ""}
+    <div style="font-family:sans-serif;max-width:520px;color:#2a2319;background:#faf7f2;padding:32px;border-radius:12px;">
+      <h2 style="color:#9c4a2a;margin:0 0 20px;">Новая заявка с сайта</h2>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="padding:8px 0;color:#6b6254;font-size:13px;width:110px;">Имя</td>
+          <td style="padding:8px 0;font-weight:500;">{name}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#6b6254;font-size:13px;">Контакт</td>
+          <td style="padding:8px 0;">{contact}</td>
+        </tr>
+        {message_block}
       </table>
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd7cc;font-size:12px;color:#b0a898;">
+        Заявка получена с сайта Елены Ореховой
+      </div>
     </div>
     """
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = smtp_user or "noreply@poehali.dev"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    data = urllib.parse.urlencode({
+        "from":    f"Сайт Елены Ореховой <mailgun@{domain}>",
+        "to":      to_email,
+        "subject": f"Новая заявка — {name}",
+        "html":    html,
+    }).encode("utf-8")
 
-    if smtp_user and smtp_pass:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as srv:
-            srv.login(smtp_user, smtp_pass)
-            srv.sendmail(msg["From"], [to_email], msg.as_string())
+    url = f"https://api.mailgun.net/v3/{domain}/messages"
+    req = urllib.request.Request(url, data=data, method="POST")
+
+    import base64
+    creds = base64.b64encode(f"api:{api_key}".encode()).decode()
+    req.add_header("Authorization", f"Basic {creds}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
